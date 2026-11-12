@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Библиотека квизов</title>
+<style>
+:root{--bg:#f4f1fb;--card:#fff;--tx:#241b3a;--mu:#6b6384;--pr:#6c3df4;--ok:#1fa463;--okb:#d9f5e6;--no:#e0334c;--nob:#fde0e5;--bd:#ddd6f0}
+@media(prefers-color-scheme:dark){:root{--bg:#16122a;--card:#221c3d;--tx:#f0ecfb;--mu:#a79fc4;--okb:#12382a;--nob:#401822;--bd:#3a3260}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:10px;margin:8px 0 16px}header h1{margin:0;font-size:26px;cursor:pointer}
+.card{background:var(--card);border-radius:18px;padding:18px;box-shadow:0 4px 18px #0001}
+p,.mu{color:var(--mu)}
+#s{width:100%;padding:12px 14px;border-radius:14px;border:2px solid var(--bd);background:var(--card);color:var(--tx);font:inherit;margin-bottom:12px}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.item{background:var(--card);border:2px solid var(--bd);border-radius:16px;padding:16px;cursor:pointer;text-align:left;color:var(--tx);font:inherit}
+.item:hover{border-color:var(--pr)}.item b{display:block;margin-bottom:4px}.item small{color:var(--mu)}
+.bar{height:8px;background:var(--bd);border-radius:9px;overflow:hidden;margin:6px 0 14px}.bar i{display:block;height:100%;background:var(--pr);transition:width .3s}
+.top{display:flex;justify-content:space-between;color:var(--mu);font-size:14px}
+.q{font-size:18px;font-weight:600;margin:6px 0 14px;overflow-x:auto}
+.opt{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:var(--bg);color:var(--tx);border:2px solid var(--bd);border-radius:14px;padding:12px;margin:8px 0;font:inherit;cursor:pointer;overflow-x:auto}
+.opt b{flex:none;width:28px;height:28px;border-radius:50%;background:var(--pr);color:#fff;display:grid;place-items:center;font-size:14px}
+.opt.ok{background:var(--okb);border-color:var(--ok)}.opt.no{background:var(--nob);border-color:var(--no)}
+.btn{background:var(--pr);color:#fff;border:0;border-radius:14px;padding:13px 20px;font:600 16px system-ui,sans-serif;cursor:pointer;margin:8px 8px 0 0}.btn.s{background:var(--bd);color:var(--tx)}
+.big{font-size:46px;font-weight:800;color:var(--pr)}.rv{border-top:1px solid var(--bd);padding:10px 0;overflow-x:auto}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:8px;margin:12px 0}
+.gb{border:2px solid var(--bd);background:var(--bg);color:var(--tx);border-radius:10px;padding:10px 0;font:600 15px system-ui,sans-serif;cursor:pointer}.g1{background:var(--okb);border-color:var(--ok)}.g0{background:var(--nob);border-color:var(--no)}
+</style></head><body><main>
+<header><span style="font-size:30px">📚</span><h1 id="home">Библиотека квизов</h1></header>
+<div id="app"></div></main>
+<script>window.MathJax={tex:{inlineMath:[['$','$']]},svg:{fontCache:'global'}}</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" async></script>
+<script>
+const DIR='quizzes/';           // папка с тестами рядом с index.html
+const $=s=>document.querySelector(s),app=$('#app');
+const sh=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const typeset=()=>{try{window.MathJax&&MathJax.typesetPromise&&MathJax.typesetPromise([app])}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ALL=[],Q,i,score,wrong,fin,cur;
+
+/* список файлов: 1) quizzes/index.json  2) GitHub API (для *.github.io) */
+async function listFiles(){
+  try{const r=await fetch(DIR+'index.json',{cache:'no-cache'});if(r.ok){const j=await r.json();return j.map(x=>typeof x==='string'?x:x.file)}}catch(e){}
+  const h=location.hostname;
+  if(h.endsWith('.github.io')){
+    const owner=h.split('.')[0],seg=location.pathname.split('/')[1],repo=seg&&!seg.endsWith('.html')?seg:h;
+    const r=await fetch('https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+DIR.replace(/\/$/,''));
+    if(r.ok)return (await r.json()).map(f=>f.name).filter(n=>/\.json$/i.test(n)&&n!=='index.json');
+  }
+  throw new Error('Не удалось получить список тестов. Положите файлы в папку «quizzes» и создайте quizzes/index.json со списком имён.');
+}
+async function home(){
+  location.hash='';Q=null;
+  app.innerHTML='<p>Загрузка…</p>';
+  let files;try{files=await listFiles()}catch(e){app.innerHTML='<div class="card"><p>'+esc(e.message)+'</p></div>';return}
+  const items=(await Promise.all(files.map(async f=>{
+    try{const j=await (await fetch(DIR+encodeURIComponent(f))).json();return{f,title:j.title||f,n:j.questions.length}}catch(e){return null}
+  }))).filter(Boolean).sort((a,b)=>a.title.localeCompare(b.title,'ru'));
+  app.innerHTML='<input id="s" placeholder="Поиск по названию…"><div class="lib"></div>'+(items.length?'':'<div class="card"><p>Пока нет ни одного квиза.</p></div>');
+  const box=app.querySelector('.lib');
+  const draw=q=>{box.innerHTML='';items.filter(x=>x.title.toLowerCase().includes(q.toLowerCase())).forEach(x=>{
+    const b=document.createElement('button');b.className='item';b.innerHTML='<b>'+esc(x.title)+'</b><small>'+x.n+' вопросов</small>';b.onclick=()=>open(x.f);box.appendChild(b)})};
+  draw('');$('#s').oninput=e=>draw(e.target.value);
+}
+async function open(f){
+  location.hash=encodeURIComponent(f);
+  try{const j=await (await fetch(DIR+encodeURIComponent(f))).json();ALL=j.questions.map(x=>[x.q,...x.a]);cur=j.title||f}
+  catch(e){app.innerHTML='<div class="card"><p>Не удалось загрузить квиз.</p></div>';return}
+  menu();
+}
+function btn(t,f,s){const b=document.createElement('button');b.className='btn'+(s?' s':'');b.textContent=t;b.onclick=f;app.appendChild(b);return b}
+function box(){app.innerHTML='<div class="card" id="c"></div>';return $('#c')}
+function menu(){
+  Q=null;const c=box();c.innerHTML='<h2 style="margin-top:0">'+esc(cur)+'</h2><p>Вопросов: '+ALL.length+'. Варианты перемешиваются при каждом прохождении.</p>';
+  const add=(t,f,s)=>{const b=btn(t,f,s);c.appendChild(b)};
+  add('Вперемешку',()=>start(ALL));add('По порядку',()=>start(ALL,1),1);add('Все вопросы',grid,1);add('← В библиотеку',home,1);typeset();
+}
+function start(src,o,at){
+  Q=(o?[...src]:sh(src)).map(r=>({n:ALL.findIndex(a=>a[0]===r[0]),q:r[0],o:sh(r.slice(1).map((t,k)=>({t,c:k===0})))}));
+  i=at||0;score=0;wrong=[];fin=false;show();
+}
+function grid(){
+  const c=box();c.innerHTML='<h2 style="margin-top:0">Все вопросы</h2><p>Нажмите на номер, чтобы перейти к вопросу.</p><div class="g"></div>';
+  const g=c.querySelector('.g');
+  ALL.forEach((r,n)=>{
+    const b=document.createElement('button');b.className='gb';b.textContent=n+1;
+    const j=Q?Q.findIndex(x=>x.n===n):-1;
+    if(j>=0&&Q[j].p!==undefined)b.classList.add(Q[j].o[Q[j].p].c?'g1':'g0');
+    b.onclick=()=>{if(j>=0){i=j;fin=false;show()}else start(ALL,1,n)};g.appendChild(b);
+  });
+  c.appendChild(btn('Назад',()=>!Q?menu():fin?end():show(),1));
+}
+function nav(c){c.appendChild(btn(i+1<Q.length?'Дальше':'Результат',()=>{i++;i<Q.length?show():end()}));c.appendChild(btn('☰ Все вопросы',grid,1))}
+function show(){
+  const q=Q[i],c=box();
+  c.innerHTML='<div class="top"><span>Вопрос '+(q.n+1)+' ('+(i+1)+'/'+Q.length+')</span><span>Баллы: '+score+'</span></div><div class="bar"><i style="width:'+(i/Q.length*100)+'%"></i></div><div class="q"></div><div id="os"></div>';
+  c.querySelector('.q').textContent=q.q;
+  q.o.forEach((o,k)=>{const b=document.createElement('button');b.className='opt';b.innerHTML='<b>'+'ABCDEFGHIJ'[k]+'</b><span></span>';b.lastChild.textContent=o.t;b.onclick=()=>pick(k);$('#os').appendChild(b)});
+  if(q.p!==undefined){mark();nav(c)}else c.appendChild(btn('☰ Все вопросы',grid,1));
+  typeset();
+}
+function mark(){const q=Q[i];[...document.querySelectorAll('.opt')].forEach((x,j)=>{if(q.o[j].c)x.classList.add('ok');else if(j===q.p)x.classList.add('no')})}
+function pick(k){const q=Q[i];if(q.p!==undefined)return;q.p=k;if(q.o[k].c)score++;else wrong.push(q);mark();const c=$('#c');c.querySelector('.btn.s').remove();nav(c)}
+function end(){
+  fin=true;const c=box();
+  c.innerHTML='<h2 style="margin-top:0">Готово!</h2><div class="big">'+score+' / '+Q.length+'</div><p>'+Math.round(score/Q.length*100)+'% верных ответов</p>';
+  c.appendChild(btn('Заново',()=>start(ALL)));
+  if(wrong.length)c.appendChild(btn('Работа над ошибками ('+wrong.length+')',()=>start(wrong.map(w=>[w.q,...w.o.slice().sort((a,b)=>b.c-a.c).map(o=>o.t)])),1));
+  c.appendChild(btn('Все вопросы',grid,1));c.appendChild(btn('В библиотеку',home,1));
+  wrong.forEach(w=>{const d=document.createElement('div');d.className='rv';d.textContent=w.q+'  →  '+w.o.find(o=>o.c).t;c.appendChild(d)});
+  typeset();
+}
+$('#home').onclick=home;
+addEventListener('hashchange',()=>{const h=decodeURIComponent(location.hash.slice(1));if(!h&&Q)home()});
+const h0=decodeURIComponent(location.hash.slice(1));h0?open(h0):home();
+</script></body></html>
